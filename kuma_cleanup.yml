@@ -1,0 +1,43 @@
+---
+- name: Clean and shrink Uptime Kuma database
+  hosts: uptime_kuma
+  become: yes
+
+  tasks:
+    - name: Install sqlite3 if missing
+      apt:
+        name: sqlite3
+        state: present
+
+    - name: Stop Uptime Kuma service
+      shell: "pkill -f 'uptime-kuma'"
+      ignore_errors: yes
+
+    - name: Wait for process to stop
+      pause:
+        seconds: 5
+
+    - name: Create database backup
+      copy:
+        src: "/opt/uptime-kuma/data/kuma.db"
+        dest: "/opt/uptime-kuma/data/kuma.db.backup.{{ ansible_date_time.epoch }}"
+        remote_src: yes
+
+    - name: Clean old heartbeat data (keep 30 days)
+      shell: |
+        sqlite3 /opt/uptime-kuma/data/kuma.db "DELETE FROM heartbeat WHERE time < datetime('now', '-30 days');"
+
+    - name: Shrink database
+      shell: |
+        sqlite3 /opt/uptime-kuma/data/kuma.db "VACUUM;"
+
+    - name: Start Uptime Kuma
+      shell: |
+        cd /opt/uptime-kuma
+        nohup npm run start > /var/log/uptime-kuma.log 2>&1 &
+      async: 10
+      poll: 0
+
+    - name: Wait for Uptime Kuma to start
+      pause:
+        seconds: 10
