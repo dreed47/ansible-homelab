@@ -1,0 +1,14 @@
+# Exclude sensitive files
+*.key
+*.pem
+*_rsa
+*_dsa
+*_ed25519
+
+# Exclude backup files
+*.backup*
+*.bak
+
+# Exclude temporary files
+*.tmp
+*.temp
