@@ -1,0 +1,73 @@
+---
+- name: Update Proxmox Server
+  hosts: proxmox_servers
+  become: yes
+  gather_facts: yes
+
+  vars:
+    # Set to yes for automatic reboots if required, no for manual control
+    auto_reboot: no
+
+  tasks:
+    - name: Check current Proxmox version
+      command: pveversion
+      register: pve_version
+      changed_when: false
+
+    - name: Display current Proxmox version
+      debug:
+        msg: "Current Proxmox version: {{ pve_version.stdout }}"
+
+    - name: Update package list
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      changed_when: false  # This doesn't count as a "change" for reboot purposes
+
+    - name: Check for available upgrades
+      apt:
+        upgrade: safe
+        check_mode: yes
+      register: apt_check
+
+    - name: Display available updates
+      debug:
+        msg: "Available updates: {{ apt_check.stdout | default('No updates available') }}"
+      when: apt_check.stdout != ""
+
+    - name: Perform safe upgrade (security updates only)
+      apt:
+        upgrade: safe
+      register: upgrade_result
+      when: apt_check is changed
+
+    - name: Display upgrade results
+      debug:
+        msg: "Upgrade completed. Packages upgraded: {{ upgrade_result.stdout | default('None') }}"
+      when: upgrade_result is changed
+
+    - name: Check if reboot is required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required_file
+
+    - name: Reboot server if required and auto_reboot is enabled
+      ansible.builtin.reboot:
+        msg: "Reboot initiated by Ansible for Proxmox updates"
+        connect_timeout: 5
+        reboot_timeout: 300
+        pre_reboot_delay: 0
+        post_reboot_delay: 30
+        test_command: uptime
+      when:
+        - reboot_required_file.stat.exists
+        - auto_reboot | bool
+
+    - name: Warn about required manual reboot
+      debug:
+        msg: |
+          REBOOT REQUIRED! The Proxmox server needs a reboot to complete updates.
+          Please reboot manually or set auto_reboot: yes in the playbook.
+      when:
+        - reboot_required_file.stat.exists
+        - not (auto_reboot | bool)
