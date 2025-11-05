@@ -1,6 +1,6 @@
 ---
 - name: Update Proxmox Server
-  hosts: proxmox_servers # This matches the group name in inventory
+  hosts: proxmox_servers
   become: yes
   gather_facts: yes
 
@@ -20,12 +20,38 @@
         upgrade: safe
         cache_valid_time: 3600
 
-    - name: Check if reboot is required
-      stat:
-        path: /var/run/reboot-required
-      register: reboot_required
+    - name: Check if kernel update requires reboot
+      shell: |
+        current_kernel=$(uname -r)
+        latest_kernel=$(ls -t /boot/vmlinuz-* | head -1 | sed 's|/boot/vmlinuz-||')
+        if [ "$current_kernel" != "$latest_kernel" ]; then
+          echo "reboot_required"
+        fi
+      register: kernel_reboot_check
+      changed_when: false
 
-    - name: Notify about reboot requirement
+    - name: Check for Proxmox-specific services that need restart
+      shell: |
+        if systemctl list-units --failed | grep -q failed; then
+          echo "services_need_restart"
+        fi
+      register: service_check
+      changed_when: false
+      failed_when: false
+
+    - name: Notify about kernel reboot requirement
       debug:
-        msg: "Reboot required to complete updates"
-      when: reboot_required.stat.exists
+        msg: "REBOOT REQUIRED: New kernel installed ({{ kernel_reboot_check.stdout }})"
+      when: "'reboot_required' in kernel_reboot_check.stdout"
+
+    - name: Notify about service restart requirement
+      debug:
+        msg: "SERVICE RESTART NEEDED: Some services failed after update"
+      when: "'services_need_restart' in service_check.stdout"
+
+    - name: Notify if no reboot needed
+      debug:
+        msg: "No reboot required - system is up to date"
+      when:
+        - "'reboot_required' not in kernel_reboot_check.stdout"
+        - "'services_need_restart' not in service_check.stdout"
