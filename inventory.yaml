@@ -12,7 +12,10 @@ all:
         proxmox-01:
           ansible_host: 192.168.86.40
           ansible_user: root
-    
+        proxmox-02:                    
+          ansible_host: 192.168.86.90  
+          ansible_user: root           
+              
     home_assistant:
       hosts:
         ha-server:
