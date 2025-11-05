@@ -1,12 +1,27 @@
 ---
 all:
   children:
+    uptime_kuma:
+      hosts:
+        kuma-server:
+          ansible_host: 192.168.86.195
+          ansible_user: root
+    
     proxmox_servers:
       hosts:
         proxmox-01:
           ansible_host: 192.168.86.40
           ansible_user: root
-          # If using SSH key (recommended)
-          # ansible_ssh_private_key_file: ~/.ssh/id_rsa
-          # If using password (less secure)
-          # ansible_ssh_pass: your_password
+    
+    home_assistant:
+      hosts:
+        ha-server:
+          ansible_host: 192.168.86.212
+          ansible_user: root
+    
+    # Optional: Group all servers together
+    all_servers:
+      children:
+        uptime_kuma:
+        proxmox_servers:
+        home_assistant:
