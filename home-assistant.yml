@@ -1,0 +1,68 @@
+---
+- name: Update Home Assistant OS
+  hosts: home_assistant
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Check current Home Assistant version
+      shell: ha info
+      register: ha_info
+      changed_when: false
+
+    - name: Display current version
+      debug:
+        msg: "Current Home Assistant version: {{ ha_info.stdout | regex_search('Version: (.*)', '\\1') | first }}"
+
+    - name: Check for available updates
+      shell: ha os update --check
+      register: update_check
+      changed_when: false
+
+    - name: Update Home Assistant OS
+      shell: ha os update --yes
+      register: update_result
+      when: "'Update available' in update_check.stdout"
+
+    - name: Display update result
+      debug:
+        msg: "{{ update_result.stdout }}"
+      when: update_result is changed
+
+    - name: Check if core update available
+      shell: ha core update --check
+      register: core_check
+      changed_when: false
+
+    - name: Update Home Assistant core
+      shell: ha core update --yes
+      register: core_result
+      when: "'Update available' in core_check.stdout"
+
+    - name: Display core update result
+      debug:
+        msg: "{{ core_result.stdout }}"
+      when: core_result is changed
+
+    - name: Check if supervisor update available
+      shell: ha supervisor update --check
+      register: supervisor_check
+      changed_when: false
+
+    - name: Update supervisor
+      shell: ha supervisor update --yes
+      register: supervisor_result
+      when: "'Update available' in supervisor_check.stdout"
+
+    - name: Display supervisor update result
+      debug:
+        msg: "{{ supervisor_result.stdout }}"
+      when: supervisor_result is changed
+
+    - name: Notify if no updates available
+      debug:
+        msg: "Home Assistant is already up to date!"
+      when: 
+        - "'Update available' not in update_check.stdout"
+        - "'Update available' not in core_check.stdout"
+        - "'Update available' not in supervisor_check.stdout"
