@@ -1,0 +1,77 @@
+---
+- name: Update Home Assistant via API
+  hosts: localhost
+  vars:
+    ha_url: "http://192.168.86.212:8123"
+    ha_token: "{{ HA_TOKEN }}"
+
+  tasks:
+    - name: Check current Home Assistant version
+      uri:
+        url: "{{ ha_url }}/api/config"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ ha_token }}"
+          Content-Type: "application/json"
+        status_code: 200
+      register: ha_config
+
+    - name: Display current version
+      debug:
+        msg: "Current Home Assistant version: {{ ha_config.json.version }}"
+
+    - name: Check for available updates
+      uri:
+        url: "{{ ha_url }}/api/hassio/update"
+        method: GET
+        headers:
+          Authorization: "Bearer {{ ha_token }}"
+          Content-Type: "application/json"
+        status_code: 200
+      register: ha_updates
+
+    - name: Display available updates
+      debug:
+        msg: |
+          Available updates:
+          - OS: {{ ha_updates.json.data.update_available | default(false) }}
+          - Core: {{ ha_updates.json.data.core_update_available | default(false) }}
+          - Supervisor: {{ ha_updates.json.data.supervisor_update_available | default(false) }}
+
+    - name: Update Home Assistant OS
+      uri:
+        url: "{{ ha_url }}/api/hassio/os/update"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ ha_token }}"
+          Content-Type: "application/json"
+        status_code: 200
+      when: ha_updates.json.data.update_available | default(false)
+
+    - name: Update Home Assistant Core
+      uri:
+        url: "{{ ha_url }}/api/hassio/core/update"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ ha_token }}"
+          Content-Type: "application/json"
+        status_code: 200
+      when: ha_updates.json.data.core_update_available | default(false)
+
+    - name: Update Supervisor
+      uri:
+        url: "{{ ha_url }}/api/hassio/supervisor/update"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ ha_token }}"
+          Content-Type: "application/json"
+        status_code: 200
+      when: ha_updates.json.data.supervisor_update_available | default(false)
+
+    - name: Notify if no updates available
+      debug:
+        msg: "Home Assistant is already up to date!"
+      when:
+        - not ha_updates.json.data.update_available | default(false)
+        - not ha_updates.json.data.core_update_available | default(false)
+        - not ha_updates.json.data.supervisor_update_available | default(false)
