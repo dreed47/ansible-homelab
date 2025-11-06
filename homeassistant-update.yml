@@ -14,44 +14,49 @@
           Authorization: "Bearer {{ ha_token }}"
           Content-Type: "application/json"
         status_code: 200
-        validate_certs: no # ← This bypasses SSL verification
+        validate_certs: no
       register: ha_config
 
     - name: Display current version
       debug:
         msg: "Current Home Assistant version: {{ ha_config.json.version }}"
 
-    - name: Check for available updates
+    - name: Check for available updates using supervisor API
       uri:
         url: "{{ ha_url }}/api/hassio/update"
         method: GET
         headers:
           Authorization: "Bearer {{ ha_token }}"
           Content-Type: "application/json"
+          # Supervisor might need this header:
+          X-Hassio-Key: "{{ ha_token }}"
         status_code: 200
-        validate_certs: no # ← This bypasses SSL verification
+        validate_certs: no
       register: ha_updates
+      ignore_errors: yes # ← Continue even if this fails
 
-    - name: Display available updates
-      debug:
-        msg: |
-          Available updates:
-          - OS: {{ ha_updates.json.data.update_available | default(false) }}
-          - Core: {{ ha_updates.json.data.core_update_available | default(false) }}
-          - Supervisor: {{ ha_updates.json.data.supervisor_update_available | default(false) }}
-
-    - name: Update Home Assistant OS
+    - name: Alternative method - Check updates via core API
       uri:
-        url: "{{ ha_url }}/api/hassio/os/update"
-        method: POST
+        url: "{{ ha_url }}/api/hassio/core/info"
+        method: GET
         headers:
           Authorization: "Bearer {{ ha_token }}"
           Content-Type: "application/json"
         status_code: 200
-        validate_certs: no # ← This bypasses SSL verification
-      when: ha_updates.json.data.update_available | default(false)
+        validate_certs: no
+      register: ha_core_info
+      when: ha_updates is failed
 
-    - name: Update Home Assistant Core
+    - name: Display update information
+      debug:
+        msg: |
+          Update check results:
+          - Core version: {{ ha_core_info.json.data.version | default('Unknown') }}
+          - Latest version: {{ ha_core_info.json.data.version_latest | default('Unknown') }}
+          - Update available: {{ (ha_core_info.json.data.version != ha_core_info.json.data.version_latest) | default(false) }}
+      when: ha_core_info is defined
+
+    - name: Update Home Assistant Core if needed
       uri:
         url: "{{ ha_url }}/api/hassio/core/update"
         method: POST
@@ -59,24 +64,7 @@
           Authorization: "Bearer {{ ha_token }}"
           Content-Type: "application/json"
         status_code: 200
-        validate_certs: no # ← This bypasses SSL verification
-      when: ha_updates.json.data.core_update_available | default(false)
-
-    - name: Update Supervisor
-      uri:
-        url: "{{ ha_url }}/api/hassio/supervisor/update"
-        method: POST
-        headers:
-          Authorization: "Bearer {{ ha_token }}"
-          Content-Type: "application/json"
-        status_code: 200
-        validate_certs: no # ← This bypasses SSL verification
-      when: ha_updates.json.data.supervisor_update_available | default(false)
-
-    - name: Notify if no updates available
-      debug:
-        msg: "Home Assistant is already up to date!"
+        validate_certs: no
       when:
-        - not ha_updates.json.data.update_available | default(false)
-        - not ha_updates.json.data.core_update_available | default(false)
-        - not ha_updates.json.data.supervisor_update_available | default(false)
+        - ha_core_info is defined
+        - ha_core_info.json.data.version != ha_core_info.json.data.version_latest
