@@ -2,7 +2,7 @@
 - name: Update Home Assistant via API
   hosts: localhost
   vars:
-    ha_url: "http://192.168.86.212:8123"
+    ha_url: "https://192.168.86.212:8123"
     ha_token: "{{ HA_TOKEN }}"
 
   tasks:
