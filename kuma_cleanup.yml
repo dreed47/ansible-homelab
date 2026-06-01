@@ -17,19 +17,64 @@
       pause:
         seconds: 5
 
-    - name: Create database backup
-      copy:
-        src: "/opt/uptime-kuma/data/kuma.db"
-        dest: "/opt/uptime-kuma/data/kuma.db.backup.{{ ansible_date_time.epoch }}"
-        remote_src: yes
+    - name: Create compressed database backup
+      shell: |
+        gzip -c /opt/uptime-kuma/data/kuma.db > /opt/uptime-kuma/data/kuma.db.backup.{{ ansible_date_time.epoch }}.gz
+      register: backup_result
+
+    - name: Verify backup was created
+      stat:
+        path: "/opt/uptime-kuma/data/kuma.db.backup.{{ ansible_date_time.epoch }}.gz"
+      register: backup_file
+
+    - name: Fail if backup not created
+      fail:
+        msg: "Backup file was not created successfully"
+      when: not backup_file.stat.exists
+
+    - name: Keep only last 5 compressed backups
+      shell: |
+        cd /opt/uptime-kuma/data
+        ls -t kuma.db.backup.*.gz 2>/dev/null | tail -n +6 | xargs -r rm -f
+      register: cleanup_result
+
+    - name: Show deleted backups
+      debug:
+        msg: "Removed old backups: {{ cleanup_result.stdout_lines | default([]) }}"
+      when: cleanup_result.stdout != ""
+
+    - name: Count current backups
+      shell: |
+        ls -1 /opt/uptime-kuma/data/kuma.db.backup.*.gz 2>/dev/null | wc -l
+      register: backup_count
+      changed_when: false
+
+    - name: Display backup count
+      debug:
+        msg: "Current number of backups: {{ backup_count.stdout }}"
 
     - name: Clean old heartbeat data (keep 30 days)
       shell: |
         sqlite3 /opt/uptime-kuma/data/kuma.db "DELETE FROM heartbeat WHERE time < datetime('now', '-30 days');"
+      register: heartbeat_result
+
+    - name: Show heartbeat cleanup result
+      debug:
+        msg: "Old heartbeats cleaned from database"
+      when: heartbeat_result.changed is defined
 
     - name: Shrink database
       shell: |
         sqlite3 /opt/uptime-kuma/data/kuma.db "VACUUM;"
+
+    - name: Get database size after vacuum
+      stat:
+        path: "/opt/uptime-kuma/data/kuma.db"
+      register: db_size
+
+    - name: Display database size
+      debug:
+        msg: "Database size after vacuum: {{ (db_size.stat.size / 1048576) | round(2) }} MB"
 
     - name: Start Uptime Kuma
       shell: |
@@ -41,3 +86,38 @@
     - name: Wait for Uptime Kuma to start
       pause:
         seconds: 10
+
+    - name: Verify Uptime Kuma is running
+      shell: "pgrep -f 'uptime-kuma'"
+      register: kuma_pid
+      changed_when: false
+
+    - name: Check Uptime Kuma is responding
+      uri:
+        url: "http://localhost:3001"
+        status_code: 200
+        timeout: 5
+      register: web_response
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Show final summary
+      debug:
+        msg: |
+          ====================================
+          UPTIME KUMA CLEANUP COMPLETE
+          ====================================
+          Database vacuumed: YES
+          Old heartbeats removed: Kept last 30 days
+          Backup created: kuma.db.backup.{{ ansible_date_time.epoch }}.gz
+          Backup size: {{ (backup_file.stat.size / 1048576) | round(2) if backup_file.stat.exists else 'N/A' }} MB
+          Backups retained: Last 5 ({{ backup_count.stdout }} total)
+          Database size: {{ (db_size.stat.size / 1048576) | round(2) }} MB
+          Uptime Kuma running: YES (PID: {{ kuma_pid.stdout | default('unknown') }})
+          Web interface: {{ 'RESPONDING' if web_response.status == 200 else 'NOT RESPONDING' }}
+          ====================================
+
+    - name: Warn if web interface not responding
+      debug:
+        msg: "WARNING: Uptime Kuma web interface is not responding on port 3001"
+      when: web_response.status is defined and web_response.status != 200
