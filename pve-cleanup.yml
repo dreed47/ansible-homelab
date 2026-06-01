@@ -1,6 +1,6 @@
 ---
 - name: Run PVE cleanup script on all Proxmox nodes
-  hosts: proxmox_nodes
+  hosts: proxmox_servers
   gather_facts: false
 
   tasks:
