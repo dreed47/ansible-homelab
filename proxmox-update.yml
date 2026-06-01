@@ -28,7 +28,6 @@
           UPGRADE COMPLETED
           ====================================
           Packages upgraded: {{ apt_result.changed | default(false) }}
-      when: apt_result.changed is defined
 
     - name: Check if reboot is required
       stat:
@@ -79,29 +78,29 @@
       wait_for_connection:
         delay: 10
         timeout: 300
-      when: reboot_result is defined and reboot_result.changed
+      when: reboot_required_file.stat.exists and reboot_result is defined and reboot_result.changed
 
     - name: Get kernel version after reboot
       command: uname -r
       register: kernel_after
       changed_when: false
-      when: reboot_result is defined and reboot_result.changed
+      when: reboot_required_file.stat.exists and reboot_result is defined and reboot_result.changed
 
     - name: Display kernel version after reboot
       debug:
         msg: "Kernel after reboot: {{ kernel_after.stdout }}"
-      when: kernel_after is defined
+      when: reboot_required_file.stat.exists and kernel_after is defined
 
     - name: Check Proxmox version after update
       command: pveversion
       register: pve_version_after
       changed_when: false
-      when: reboot_result is defined and reboot_result.changed
+      when: reboot_required_file.stat.exists
 
     - name: Display Proxmox version after reboot
       debug:
         msg: "Proxmox version after reboot: {{ pve_version_after.stdout }}"
-      when: pve_version_after is defined
+      when: reboot_required_file.stat.exists and pve_version_after is defined
 
     - name: Final summary
       debug:
@@ -111,7 +110,8 @@
           ====================================
           Before: {{ pve_version_before.stdout }}
           After:  {{ pve_version_after.stdout | default(pve_version_before.stdout) }}
-          Reboot: {{ 'YES' if reboot_required_file.stat.exists else 'NO' }}
+          Packages upgraded: {{ apt_result.changed | default(false) }}
+          Reboot required: {{ 'YES' if reboot_required_file.stat.exists else 'NO' }}
           {% if reboot_required_file.stat.exists and reboot_result is defined %}
           Reboot status: SUCCESSFUL
           Kernel: {{ kernel_before.stdout }} → {{ kernel_after.stdout }}
