@@ -1,0 +1,13 @@
+---
+- name: Run PVE cleanup script on all Proxmox nodes
+  hosts: proxmox_nodes
+  gather_facts: false
+
+  tasks:
+    - name: Execute the cleanup script
+      ansible.builtin.command: /usr/local/bin/pve-cleanup.sh
+      register: result
+
+    - name: Show summary from each node
+      ansible.builtin.debug:
+        msg: "{{ result.stdout }}"
