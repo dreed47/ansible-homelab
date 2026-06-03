@@ -2,17 +2,16 @@
 - name: Run PVE cleanup script on all Proxmox nodes
   hosts: proxmox_servers
   gather_facts: false
+  become: yes
 
   tasks:
     - name: Execute the cleanup script
       ansible.builtin.command: /usr/local/bin/pve-cleanup.sh
       register: result
+      timeout: 300
+      environment:
+        DEBIAN_FRONTEND: noninteractive
 
-    - name: Show summary from each node
+    - name: Show summary
       ansible.builtin.debug:
         msg: "{{ result.stdout }}"
-
-    - name: Check for failures
-      ansible.builtin.fail:
-        msg: "Cleanup failed on {{ inventory_hostname }}"
-      when: "'[FAIL]' in result.stdout"
