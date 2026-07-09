@@ -3,7 +3,7 @@
   hosts: proxmox_servers
   become: yes
   gather_facts: yes
-  serial: 1
+  #serial: 1
 
   tasks:
     - name: Check current Proxmox version before update
